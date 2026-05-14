@@ -1,90 +1,54 @@
 --[[
-    BuffMaster - ui.lua
+    BuffMaster - Ui.lua
     All ImGui rendering. Receives app state/callbacks via init({...}).
 ]]
 
-local mq    = require('mq')
-local imgui = require('ImGui')
-local icons = require('mq.Icons')
-local utils = require('buffmaster.lib.utils')
+local mq               = require('mq')
+local imgui            = require('ImGui')
+local icons            = require('mq.Icons')
+local Utils            = require('lib.utils')
+local Globals          = require('lib.globals')
+local Logger           = require('lib.logger')
+local Events           = require('lib.events')
+local Binds            = require('lib.binds')
 
-local ui    = {}
-
-local me    = mq.TLO.Me
-
--- App Bindings (set in ui.init)
-
-local deps  = nil
-
--- Convenience accessors (called every frame)
-
-local function settings()         return deps.settings() end
-local function presetSets()       return deps.presetSets() end
-local function buffHistory()      return deps.buffHistory() end
-local function isBuffing()        return deps.isBuffing() end
-local function aborted()          return deps.aborted() end
-local function statusText()       return deps.statusText() end
-local function showUIFlag()       return deps.showUI() end
-local function showWelcomeFlag()  return deps.showWelcome() end
-local function getSet(name)       return deps.getSet(name) end
-local function getAllSetNames(a)  return deps.getAllSetNames(a) end
-local function isPresetSet(name)  return deps.isPresetSet(name) end
-local function commands()         return deps.commands end
-local function commandOrder()     return deps.commandOrder end
-local function setSettingsDirty() deps.setSettingsDirty() end
+local Ui               = {}
 
 -- UI Temp State
 
-local showSettings         = false
-local showManageSets       = false
-local newSetName           = ""
-local renameSetName        = ""
-local manualPlayerName     = ""
-local pendingRemoveIdx     = nil
-local newSourceName        = ""
-local newSourceType        = "spell"
-local newSourceIcon        = 0
-local showAddSource        = false
-local editingIdx           = nil
-local editSourceType       = ""
-local editSourceName       = ""
-local editSourceIcon       = 0
-local commandsExpanded     = nil
+local showSettings     = false
+local showManageSets   = false
+local newSetName       = ""
+local renameSetName    = ""
+local manualPlayerName = ""
+local pendingRemoveIdx = nil
+local newSourceName    = ""
+local newSourceType    = "spell"
+local newSourceIcon    = 0
+local showAddSource    = false
+local editingIdx       = nil
+local editSourceType   = ""
+local editSourceName   = ""
+local editSourceIcon   = 0
+local commandsExpanded = nil
 
 -- Lookup Tables
 
-local sourceTypes          = {
+local sourceTypes      = {
     { key = "spell", label = "Spell", },
     { key = "item",  label = "Clicky Item", },
 }
 
-local tellAccessOptions    = {
-    { key = "disabled",   label = "Disabled", },
-    { key = "anyone",     label = "Anyone", },
-    { key = "group",      label = "Group Only", },
-    { key = "raid",       label = "Raid Only", },
-    { key = "fellowship", label = "Fellowship Only", },
-    { key = "allowlist",  label = "Allow List", },
-    { key = "denylist",   label = "Deny List", },
-}
-
 -- Texture Handles
 
-local animItems            = mq.FindTextureAnimation("A_DragItem")
-local animSpells           = mq.FindTextureAnimation("A_SpellIcons")
-local bgTexture            = nil
+local animItems        = mq.FindTextureAnimation("A_DragItem")
+local animSpells       = mq.FindTextureAnimation("A_SpellIcons")
+local bgTexture        = nil
 
-local headColor            = ImVec4(0.6, 0.85, 1.0, 1.0)
-local bodyColor            = ImVec4(0.78, 0.74, 0.6, 1.0)
+local headColor        = ImVec4(0.6, 0.85, 1.0, 1.0)
+local bodyColor        = ImVec4(0.78, 0.74, 0.6, 1.0)
 
 -- Helpers
-
-local function findIndex(tbl, key)
-    for i, entry in ipairs(tbl) do
-        if entry.key == key then return i end
-    end
-    return 1
-end
 
 local function renderWindowBg()
     if not bgTexture then return end
@@ -151,7 +115,7 @@ local function renderCursorCapture(currentName, currentIcon, idSuffix)
     if clicked and hasCursor then
         local name = mq.TLO.Cursor.Name() or ""
         local icon = mq.TLO.Cursor.Icon() or 0
-        mq.cmd("/autoinventory")
+        Utils.DoCmd("/autoinventory")
         return name, icon
     end
     return currentName, currentIcon
@@ -161,7 +125,7 @@ end
 
 local function renderWelcome()
     imgui.SetNextWindowSize(ImVec2(440, 360), ImGuiCond.Always)
-    local titleStr   = string.format("BuffMaster v%s###BuffMasterWelcome", deps.version)
+    local titleStr   = string.format("BuffMaster v%s###BuffMasterWelcome", Globals.version)
     local shouldDraw = imgui.Begin(titleStr, nil, bit32.bor(ImGuiWindowFlags.NoCollapse, ImGuiWindowFlags.NoResize))
     if shouldDraw then
         imgui.PushStyleColor(ImGuiCol.Text, headColor)
@@ -206,9 +170,9 @@ local function renderWelcome()
         local btnWidth = 100
         imgui.SetCursorPosX((imgui.GetWindowWidth() - btnWidth) * 0.5)
         if imgui.Button("Continue", btnWidth, 0) then
-            settings().welcomeDone = true
-            setSettingsDirty()
-            deps.setShowWelcome(false)
+            Globals.settings.welcomeDone = true
+            Globals.settingsDirty = true
+            Globals.showWelcome = false
         end
     end
     imgui.End()
@@ -217,9 +181,9 @@ end
 -- Source Header (two-pass: pre-render claims clicks, post-render draws visuals)
 
 local function renderSourceHeaderControls(currentSet, idx, headerCursorPos, headerScreenPos, preRender, editable)
-    local entry        = currentSet[idx]
-    local startingPos  = imgui.GetCursorPosVec()
-    local yOffset      = imgui.GetStyle().FramePadding.y
+    local entry       = currentSet[idx]
+    local startingPos = imgui.GetCursorPosVec()
+    local yOffset     = imgui.GetStyle().FramePadding.y
 
     if not preRender and entry.name ~= "" then
         local iconCell, iconAnim
@@ -252,7 +216,7 @@ local function renderSourceHeaderControls(currentSet, idx, headerCursorPos, head
         local _, toggled = renderToggle("##enable", entry.enabled)
         if preRender and toggled then
             entry.enabled = not entry.enabled
-            setSettingsDirty()
+            Globals.settingsDirty = true
         end
     else
         imgui.BeginDisabled()
@@ -265,7 +229,7 @@ local function renderSourceHeaderControls(currentSet, idx, headerCursorPos, head
         if idx > 1 then
             if imgui.SmallButton(icons.FA_CHEVRON_UP) and preRender then
                 currentSet[idx], currentSet[idx - 1] = currentSet[idx - 1], currentSet[idx]
-                setSettingsDirty()
+                Globals.settingsDirty = true
             end
         else
             imgui.InvisibleButton("##up_spacer", 22, 1)
@@ -275,7 +239,7 @@ local function renderSourceHeaderControls(currentSet, idx, headerCursorPos, head
         if idx < #currentSet then
             if imgui.SmallButton(icons.FA_CHEVRON_DOWN) and preRender then
                 currentSet[idx], currentSet[idx + 1] = currentSet[idx + 1], currentSet[idx]
-                setSettingsDirty()
+                Globals.settingsDirty = true
             end
         else
             imgui.InvisibleButton("##dn_spacer", 22, 1)
@@ -283,10 +247,10 @@ local function renderSourceHeaderControls(currentSet, idx, headerCursorPos, head
 
         imgui.SameLine()
         if imgui.SmallButton(icons.FA_PENCIL) and preRender then
-            editingIdx      = idx
-            editSourceType  = entry.type
-            editSourceName  = entry.name
-            editSourceIcon  = entry.icon or 0
+            editingIdx     = idx
+            editSourceType = entry.type
+            editSourceName = entry.name
+            editSourceIcon = entry.icon or 0
         end
 
         imgui.SameLine()
@@ -307,13 +271,13 @@ end
 local function renderMainWindow()
     imgui.SetNextWindowSize(ImVec2(400, 380), ImGuiCond.FirstUseEver)
     imgui.SetNextWindowSizeConstraints(ImVec2(400, 380), ImVec2(800, 2000))
-    local prevShowUI = showUIFlag()
+    local prevShowUI = Globals.showUI
     local shouldDraw
     local newShowUI
     newShowUI, shouldDraw = imgui.Begin("BuffMaster", prevShowUI)
-    deps.setShowUI(newShowUI)
+    Globals.showUI = newShowUI
     if not newShowUI and prevShowUI then
-        utils.output("Window closed. Use \ag/buffmaster show\ax to reopen.")
+        Logger.log_info("Window closed. Use \ag/buffmaster show\ax to reopen.")
     end
     if shouldDraw then
         renderWindowBg()
@@ -321,37 +285,39 @@ local function renderMainWindow()
 
         imgui.Text("Status:")
         imgui.SameLine()
-        if aborted() then
+        if Globals.aborted then
             imgui.TextColored(1, 0, 0, 1, "HALTED")
             imgui.SameLine()
             if imgui.SmallButton("Reset") then
-                deps.resetHalt()
+                Globals.aborted       = false
+                Globals.stopRequested = false
+                Globals.statusText    = "Idle"
             end
-            imgui.TextColored(1, 0, 0, 1, statusText())
-        elseif isBuffing() then
-            imgui.TextColored(1, 1, 0, 1, statusText())
+            imgui.TextColored(1, 0, 0, 1, Globals.statusText)
+        elseif Globals.isBuffing then
+            imgui.TextColored(1, 1, 0, 1, Globals.statusText)
         else
-            imgui.TextColored(0, 1, 0, 1, statusText())
+            imgui.TextColored(0, 1, 0, 1, Globals.statusText)
         end
 
         imgui.Text("Current Set:")
         imgui.SameLine()
         imgui.SetNextItemWidth(200)
-        local comboLabel = settings().selectedSet ~= "" and settings().selectedSet or "No Sets Found"
-        if settings().selectedSet == "" then imgui.PushStyleColor(ImGuiCol.Text, ImVec4(0.5, 0.5, 0.5, 1.0)) end
+        local comboLabel = Globals.settings.selectedSet ~= "" and Globals.settings.selectedSet or "No Sets Found"
+        if Globals.settings.selectedSet == "" then imgui.PushStyleColor(ImGuiCol.Text, ImVec4(0.5, 0.5, 0.5, 1.0)) end
         if imgui.BeginCombo("##SetCombo", comboLabel) then
-            for _, name in ipairs(getAllSetNames()) do
-                if imgui.Selectable(name, name == settings().selectedSet) then
-                    settings().selectedSet = name
-                    setSettingsDirty()
-                    editingIdx       = nil
-                    showAddSource    = false
-                    pendingRemoveIdx = nil
+            for _, name in ipairs(Utils.getAllSetNames()) do
+                if imgui.Selectable(name, name == Globals.settings.selectedSet) then
+                    Globals.settings.selectedSet = name
+                    Globals.settingsDirty        = true
+                    editingIdx                   = nil
+                    showAddSource                = false
+                    pendingRemoveIdx             = nil
                 end
             end
             imgui.EndCombo()
         end
-        if settings().selectedSet == "" then imgui.PopStyleColor() end
+        if Globals.settings.selectedSet == "" then imgui.PopStyleColor() end
         imgui.SameLine()
         if imgui.Button("Manage") then
             showManageSets = not showManageSets
@@ -359,22 +325,22 @@ local function renderMainWindow()
 
         imgui.SeparatorText("Buff")
 
-        if isBuffing() then imgui.BeginDisabled() end
+        if Globals.isBuffing then imgui.BeginDisabled() end
         imgui.PushStyleVar(ImGuiStyleVar.FramePadding, 8, 6)
         if imgui.Button("Self") then
-            deps.addToQueue(me.DisplayName(), nil, false)
+            Utils.addToQueue(Globals.me.DisplayName(), nil, false)
         end
         imgui.SameLine()
         if imgui.Button("Target") then
-            deps.commandHandler("buff", "target")
+            Binds.handler("buff", "target")
         end
         imgui.SameLine()
         if imgui.Button("Group") then
-            deps.commandHandler("buff", "group")
+            Binds.handler("buff", "group")
         end
         imgui.SameLine()
         if imgui.Button("Raid") then
-            deps.commandHandler("buff", "raid")
+            Binds.handler("buff", "raid")
         end
         imgui.PopStyleVar()
 
@@ -384,20 +350,20 @@ local function renderMainWindow()
         manualPlayerName = imgui.InputTextWithHint("##PlayerName", "Player Name", manualPlayerName)
         imgui.SameLine()
         if imgui.Button("Go") and manualPlayerName ~= "" then
-            deps.addToQueue(manualPlayerName, nil, false)
+            Utils.addToQueue(manualPlayerName, nil, false)
         end
-        if isBuffing() then imgui.EndDisabled() end
+        if Globals.isBuffing then imgui.EndDisabled() end
 
-        if isBuffing() then
+        if Globals.isBuffing then
             if imgui.Button("Stop") then
-                deps.commandHandler("stop")
+                Binds.handler("stop")
             end
         end
 
         if imgui.CollapsingHeader("History") then
             local _, availY = imgui.GetContentRegionAvail()
             imgui.BeginChild("##HistoryScroll", ImVec2(0, availY - imgui.GetFrameHeightWithSpacing()), 0)
-            for _, h in ipairs(buffHistory()) do
+            for _, h in ipairs(Globals.buffHistory) do
                 imgui.TextColored(0.4, 0.8, 0.4, 1, "[%s]", h.timestamp)
                 imgui.SameLine(0, 4)
                 if #h.failed > 0 then
@@ -410,7 +376,7 @@ local function renderMainWindow()
                         h.aborted and " (ABORTED)" or "")
                 end
             end
-            if #buffHistory() == 0 then
+            if #Globals.buffHistory == 0 then
                 imgui.TextDisabled("No history yet.")
             end
             imgui.EndChild()
@@ -438,18 +404,18 @@ local function renderSettingsWindow()
     if settingsDraw then
         local changed
 
-        local taIndex = findIndex(tellAccessOptions, settings().tellAccess)
+        local taIndex = Utils.findIndex(Globals.tellAccessOptions, Globals.settings.tellAccess)
         imgui.SetNextItemWidth(200)
-        if imgui.BeginCombo("##tellAccess", tellAccessOptions[taIndex].label) then
-            for _, opt in ipairs(tellAccessOptions) do
-                if imgui.Selectable(opt.label, opt.key == settings().tellAccess) then
-                    local wasDisabled = settings().tellAccess == "disabled"
-                    settings().tellAccess = opt.key
-                    setSettingsDirty()
+        if imgui.BeginCombo("##tellAccess", Globals.tellAccessOptions[taIndex].label) then
+            for _, opt in ipairs(Globals.tellAccessOptions) do
+                if imgui.Selectable(opt.label, opt.key == Globals.settings.tellAccess) then
+                    local wasDisabled = Globals.settings.tellAccess == "disabled"
+                    Globals.settings.tellAccess = opt.key
+                    Globals.settingsDirty = true
                     if opt.key == "disabled" then
-                        deps.unregisterTellEvent()
+                        Events.unregisterTellEvent()
                     elseif wasDisabled then
-                        deps.registerTellEvent()
+                        Events.registerTellEvent()
                     end
                 end
             end
@@ -465,43 +431,43 @@ local function renderSettingsWindow()
         local endX          = imgui.GetWindowWidth() - imgui.GetStyle().WindowPadding.x
         local checkboxWidth = imgui.GetFrameHeight() + imgui.GetStyle().ItemInnerSpacing.x + imgui.CalcTextSize("Tell Replies")
         imgui.SetCursorPosX(startX + (endX - startX - checkboxWidth) / 2)
-        settings().tellReplies, changed = imgui.Checkbox("Tell Replies", settings().tellReplies)
+        Globals.settings.tellReplies, changed = imgui.Checkbox("Tell Replies", Globals.settings.tellReplies)
         if imgui.IsItemHovered() then
             imgui.SetTooltip("Reply to players who request buffs.")
         end
-        if changed then setSettingsDirty() end
+        if changed then Globals.settingsDirty = true end
 
-        if settings().tellAccess == "allowlist" then
-            local alStr = table.concat(settings().tellAllowlist, ", ")
+        if Globals.settings.tellAccess == "allowlist" then
+            local alStr = table.concat(Globals.settings.tellAllowlist, ", ")
             imgui.SetNextItemWidth(350)
             alStr, changed = imgui.InputTextWithHint("##allowList", "Player1, Player2", alStr)
             if changed then
-                settings().tellAllowlist = {}
+                Globals.settings.tellAllowlist = {}
                 for name in alStr:gmatch("([^,]+)") do
                     local trimmed = name:gsub("^%s+", ""):gsub("%s+$", "")
                     if trimmed ~= "" then
-                        table.insert(settings().tellAllowlist, trimmed)
+                        table.insert(Globals.settings.tellAllowlist, trimmed)
                     end
                 end
-                setSettingsDirty()
+                Globals.settingsDirty = true
             end
             imgui.SameLine()
             imgui.Text("Allow List")
         end
 
-        if settings().tellAccess == "denylist" then
-            local dlStr = table.concat(settings().tellDenylist, ", ")
+        if Globals.settings.tellAccess == "denylist" then
+            local dlStr = table.concat(Globals.settings.tellDenylist, ", ")
             imgui.SetNextItemWidth(350)
             dlStr, changed = imgui.InputTextWithHint("##denyList", "Player1, Player2", dlStr)
             if changed then
-                settings().tellDenylist = {}
+                Globals.settings.tellDenylist = {}
                 for name in dlStr:gmatch("([^,]+)") do
                     local trimmed = name:gsub("^%s+", ""):gsub("%s+$", "")
                     if trimmed ~= "" then
-                        table.insert(settings().tellDenylist, trimmed)
+                        table.insert(Globals.settings.tellDenylist, trimmed)
                     end
                 end
-                setSettingsDirty()
+                Globals.settingsDirty = true
             end
             imgui.SameLine()
             imgui.Text("Deny List")
@@ -509,15 +475,15 @@ local function renderSettingsWindow()
 
         imgui.SetNextItemWidth(200)
         local tw
-        tw, changed = imgui.InputTextWithHint("##triggerWord", "e.g. buff me", settings().triggerWord)
+        tw, changed = imgui.InputTextWithHint("##triggerWord", "e.Globals. buff me", Globals.settings.triggerWord)
         if changed then
-            settings().triggerWord = tw
-            setSettingsDirty()
+            Globals.settings.triggerWord = tw
+            Globals.settingsDirty = true
         end
         imgui.SameLine()
         imgui.Text("Tell Trigger")
         if imgui.IsItemHovered() then
-            local example = settings().triggerWord ~= "" and settings().triggerWord or "buff me"
+            local example = Globals.settings.triggerWord ~= "" and Globals.settings.triggerWord or "buff me"
             imgui.SetTooltip("Keyword in a tell that triggers buffing.\nExample: /tell YourName %s [Set Name]", example)
         end
 
@@ -530,13 +496,13 @@ local function renderSettingsWindow()
             { key = "dannet",   label = "DanNet", },
             { key = "e3bcs",    label = "E3BCS", },
         }
-        local aaIndex         = findIndex(announceOptions, settings().announceArming)
+        local aaIndex         = Utils.findIndex(announceOptions, Globals.settings.announceArming)
         imgui.SetNextItemWidth(200)
         if imgui.BeginCombo("##announceArming", announceOptions[aaIndex].label) then
             for _, opt in ipairs(announceOptions) do
-                if imgui.Selectable(opt.label, opt.key == settings().announceArming) then
-                    settings().announceArming = opt.key
-                    setSettingsDirty()
+                if imgui.Selectable(opt.label, opt.key == Globals.settings.announceArming) then
+                    Globals.settings.announceArming = opt.key
+                    Globals.settingsDirty = true
                 end
             end
             imgui.EndCombo()
@@ -546,20 +512,20 @@ local function renderSettingsWindow()
 
         imgui.SetNextItemWidth(200)
         local pqc
-        pqc, changed = imgui.InputTextWithHint("##preQueueCmd", "/echo Buffing started", settings().preQueueCommand)
+        pqc, changed = imgui.InputTextWithHint("##preQueueCmd", "/echo Buffing started", Globals.settings.preQueueCommand)
         if changed then
-            settings().preQueueCommand = pqc
-            setSettingsDirty()
+            Globals.settings.preQueueCommand = pqc
+            Globals.settingsDirty = true
         end
         imgui.SameLine()
         imgui.Text("Pre-Queue Command")
 
         imgui.SetNextItemWidth(200)
         local poqc
-        poqc, changed = imgui.InputTextWithHint("##postQueueCmd", "/echo Buffing complete", settings().postQueueCommand)
+        poqc, changed = imgui.InputTextWithHint("##postQueueCmd", "/echo Buffing complete", Globals.settings.postQueueCommand)
         if changed then
-            settings().postQueueCommand = poqc
-            setSettingsDirty()
+            Globals.settings.postQueueCommand = poqc
+            Globals.settingsDirty = true
         end
         imgui.SameLine()
         imgui.Text("Post-Queue Command")
@@ -568,10 +534,10 @@ local function renderSettingsWindow()
 
         imgui.SetNextItemWidth(80)
         local cd
-        cd, changed = imgui.InputInt("##castDistance", settings().castDistance, 0, 0)
+        cd, changed = imgui.InputInt("##castDistance", Globals.settings.castDistance, 0, 0)
         if changed then
-            settings().castDistance = math.max(10, math.min(500, cd))
-            setSettingsDirty()
+            Globals.settings.castDistance = math.max(10, math.min(500, cd))
+            Globals.settingsDirty = true
         end
         imgui.SameLine()
         imgui.Text("Max Cast Distance")
@@ -579,8 +545,32 @@ local function renderSettingsWindow()
             imgui.SetTooltip("Maximum distance to a requester before BuffMaster skips them.")
         end
 
-        settings().debugMode, changed = imgui.Checkbox("Debug Logging", settings().debugMode)
-        if changed then setSettingsDirty() end
+        local currentLevel = math.max(3, Globals.settings.logLevel or 3)
+        local currentLabel = "Info"
+        for _, opt in ipairs(Logger.levelOptions) do
+            if opt.level == currentLevel then
+                currentLabel = opt.label
+                break
+            end
+        end
+        imgui.SetNextItemWidth(200)
+        if imgui.BeginCombo("##logLevel", currentLabel) then
+            for _, opt in ipairs(Logger.levelOptions) do
+                if opt.level >= 3 then
+                    if imgui.Selectable(opt.label, opt.level == currentLevel) then
+                        Globals.settings.logLevel = opt.level
+                        Logger.set_log_level(opt.level)
+                        Globals.settingsDirty     = true
+                    end
+                end
+            end
+            imgui.EndCombo()
+        end
+        imgui.SameLine()
+        imgui.Text("Log Level")
+        if imgui.IsItemHovered() then
+            imgui.SetTooltip("Messages at or above this level are printed.\nInfo is the default; Debug+ shows progressively more internal detail.")
+        end
 
         imgui.NewLine()
         imgui.PushStyleColor(ImGuiCol.Text, headColor)
@@ -589,8 +579,8 @@ local function renderSettingsWindow()
         if commandsExpanded then
             local cmdUsageColor = ImVec4(0.5, 0.72, 0.85, 1.0)
             imgui.PushTextWrapPos(0)
-            for _, name in ipairs(commandOrder()) do
-                local cmd        = commands()[name]
+            for _, name in ipairs(Binds.commandOrder) do
+                local cmd        = Binds.commands[name]
                 local shortUsage = cmd.usage:gsub("^/buffmaster ", "")
                 imgui.Indent(10)
                 imgui.PushStyleColor(ImGuiCol.Text, cmdUsageColor)
@@ -618,19 +608,19 @@ local function renderManageSetsWindow()
     newShow, manageSetsDraw = imgui.Begin("Manage Sets###BuffMasterEditSets", showManageSets)
     showManageSets = newShow
     if manageSetsDraw then
-        local isPreset = isPresetSet(settings().selectedSet)
+        local isPreset = Utils.isPresetSet(Globals.settings.selectedSet)
 
         imgui.Text("Set:")
         imgui.SameLine()
         imgui.SetNextItemWidth(200)
-        if imgui.BeginCombo("##EditSetCombo", settings().selectedSet) then
-            for _, name in ipairs(getAllSetNames()) do
-                if imgui.Selectable(name .. "##edit", name == settings().selectedSet) then
-                    settings().selectedSet = name
-                    setSettingsDirty()
-                    editingIdx       = nil
-                    showAddSource    = false
-                    pendingRemoveIdx = nil
+        if imgui.BeginCombo("##EditSetCombo", Globals.settings.selectedSet) then
+            for _, name in ipairs(Utils.getAllSetNames()) do
+                if imgui.Selectable(name .. "##edit", name == Globals.settings.selectedSet) then
+                    Globals.settings.selectedSet = name
+                    Globals.settingsDirty        = true
+                    editingIdx                   = nil
+                    showAddSource                = false
+                    pendingRemoveIdx             = nil
                 end
             end
             imgui.EndCombo()
@@ -639,7 +629,7 @@ local function renderManageSetsWindow()
         local refreshWidth = imgui.CalcTextSize(icons.FA_REFRESH) + imgui.GetStyle().FramePadding.x * 2
         imgui.SameLine(imgui.GetContentRegionAvail() - refreshWidth + imgui.GetCursorPosX())
         if imgui.Button(icons.FA_REFRESH .. "##Rescan") then
-            deps.resolvePresets()
+            Utils.resolvePresets()
         end
         if imgui.IsItemHovered() then
             imgui.SetTooltip("Re-scan presets against your current spellbook and inventory.")
@@ -657,7 +647,7 @@ local function renderManageSetsWindow()
         imgui.SameLine()
         if isPreset then imgui.BeginDisabled() end
         if imgui.Button("Rename") then
-            renameSetName = settings().selectedSet
+            renameSetName = Globals.settings.selectedSet
             imgui.OpenPopup("RenameSetPopup##Edit")
         end
         imgui.SameLine()
@@ -670,10 +660,10 @@ local function renderManageSetsWindow()
             imgui.Text("New Set Name:")
             newSetName = imgui.InputTextWithHint("##NewSetName", "Set Name", newSetName)
             if imgui.Button("Create") and newSetName ~= "" then
-                if not settings().sets[newSetName] and not presetSets()[newSetName] then
-                    settings().sets[newSetName] = {}
-                    settings().selectedSet      = newSetName
-                    setSettingsDirty()
+                if not Globals.settings.sets[newSetName] and not Globals.presetSets[newSetName] then
+                    Globals.settings.sets[newSetName] = {}
+                    Globals.settings.selectedSet      = newSetName
+                    Globals.settingsDirty             = true
                 end
                 imgui.CloseCurrentPopup()
             end
@@ -683,11 +673,11 @@ local function renderManageSetsWindow()
         end
 
         if imgui.BeginPopup("CopySetPopup##Edit") then
-            imgui.Text("Copy '%s' as:", settings().selectedSet)
+            imgui.Text("Copy '%s' as:", Globals.settings.selectedSet)
             newSetName = imgui.InputTextWithHint("##CopySetName", "Set Name", newSetName)
             if imgui.Button("Copy##Confirm") and newSetName ~= "" then
-                if not settings().sets[newSetName] and not presetSets()[newSetName] then
-                    local sourceSet = getSet(settings().selectedSet)
+                if not Globals.settings.sets[newSetName] and not Globals.presetSets[newSetName] then
+                    local sourceSet = Utils.getSet(Globals.settings.selectedSet)
                     if sourceSet then
                         local newSet = {}
                         for _, entry in ipairs(sourceSet) do
@@ -700,9 +690,9 @@ local function renderManageSetsWindow()
                                 })
                             end
                         end
-                        settings().sets[newSetName] = newSet
-                        settings().selectedSet      = newSetName
-                        setSettingsDirty()
+                        Globals.settings.sets[newSetName] = newSet
+                        Globals.settings.selectedSet      = newSetName
+                        Globals.settingsDirty             = true
                     end
                 end
                 imgui.CloseCurrentPopup()
@@ -713,14 +703,14 @@ local function renderManageSetsWindow()
         end
 
         if imgui.BeginPopup("RenameSetPopup##Edit") then
-            imgui.Text("Rename '%s' to:", settings().selectedSet)
+            imgui.Text("Rename '%s' to:", Globals.settings.selectedSet)
             renameSetName = imgui.InputTextWithHint("##RenameSetName", "Set Name", renameSetName)
-            if imgui.Button("Rename##Confirm") and renameSetName ~= "" and renameSetName ~= settings().selectedSet then
-                if not settings().sets[renameSetName] and not presetSets()[renameSetName] then
-                    settings().sets[renameSetName]          = settings().sets[settings().selectedSet]
-                    settings().sets[settings().selectedSet] = nil
-                    settings().selectedSet                  = renameSetName
-                    setSettingsDirty()
+            if imgui.Button("Rename##Confirm") and renameSetName ~= "" and renameSetName ~= Globals.settings.selectedSet then
+                if not Globals.settings.sets[renameSetName] and not Globals.presetSets[renameSetName] then
+                    Globals.settings.sets[renameSetName]                = Globals.settings.sets[Globals.settings.selectedSet]
+                    Globals.settings.sets[Globals.settings.selectedSet] = nil
+                    Globals.settings.selectedSet                        = renameSetName
+                    Globals.settingsDirty                               = true
                 end
                 imgui.CloseCurrentPopup()
             end
@@ -730,12 +720,12 @@ local function renderManageSetsWindow()
         end
 
         if imgui.BeginPopup("DeleteSetPopup##Edit") then
-            imgui.Text("Delete '%s'?", settings().selectedSet)
+            imgui.Text("Delete '%s'?", Globals.settings.selectedSet)
             if imgui.Button("Yes, Delete") then
-                settings().sets[settings().selectedSet] = nil
-                local remaining                         = getAllSetNames()
-                settings().selectedSet                  = remaining[1] or ""
-                setSettingsDirty()
+                Globals.settings.sets[Globals.settings.selectedSet] = nil
+                local remaining                                     = Utils.getAllSetNames()
+                Globals.settings.selectedSet                        = remaining[1] or ""
+                Globals.settingsDirty                               = true
                 imgui.CloseCurrentPopup()
             end
             imgui.SameLine()
@@ -743,9 +733,9 @@ local function renderManageSetsWindow()
             imgui.EndPopup()
         end
 
-        local currentSet = getSet(settings().selectedSet)
+        local currentSet = Utils.getSet(Globals.settings.selectedSet)
         if currentSet then
-            local editable = not isPreset and not isBuffing()
+            local editable = not isPreset and not Globals.isBuffing
 
             imgui.SeparatorText("Buffs")
 
@@ -773,7 +763,7 @@ local function renderManageSetsWindow()
 
                 if headerOpen then
                     imgui.Indent()
-                    local castCount = (settings().castCounts[settings().selectedSet] or {})[entry.name] or 0
+                    local castCount = (Globals.settings.castCounts[Globals.settings.selectedSet] or {})[entry.name] or 0
                     imgui.TextDisabled("Type: %s   Cast count: %d", entry.type, castCount)
                     if entry.candidates and #entry.candidates > 1 then
                         imgui.Separator()
@@ -807,9 +797,9 @@ local function renderManageSetsWindow()
                     imgui.Text("Remove '%s'?", entryName)
                     if imgui.Button("Yes, Remove") then
                         table.remove(currentSet, pendingRemoveIdx)
-                        setSettingsDirty()
-                        editingIdx       = nil
-                        pendingRemoveIdx = nil
+                        Globals.settingsDirty = true
+                        editingIdx            = nil
+                        pendingRemoveIdx      = nil
                         imgui.CloseCurrentPopup()
                     end
                     imgui.SameLine()
@@ -822,10 +812,10 @@ local function renderManageSetsWindow()
 
                 imgui.Separator()
                 if imgui.Button("Add Buff") then
-                    newSourceName  = ""
-                    newSourceType  = "spell"
-                    newSourceIcon  = 0
-                    showAddSource  = true
+                    newSourceName = ""
+                    newSourceType = "spell"
+                    newSourceIcon = 0
+                    showAddSource = true
                 end
             end
         end
@@ -836,8 +826,8 @@ end
 -- Add Buff Window
 
 local function renderAddSourceWindow()
-    local currentSet = getSet(settings().selectedSet)
-    if not currentSet or isPresetSet(settings().selectedSet) or isBuffing() then
+    local currentSet = Utils.getSet(Globals.settings.selectedSet)
+    if not currentSet or Utils.isPresetSet(Globals.settings.selectedSet) or Globals.isBuffing then
         showAddSource = false
         return
     end
@@ -845,7 +835,7 @@ local function renderAddSourceWindow()
     local addOpen, addDraw = imgui.Begin("Add Buff###BuffMasterAddSource", showAddSource)
     if not addOpen then showAddSource = false end
     if addDraw then
-        local nsIdx = findIndex(sourceTypes, newSourceType)
+        local nsIdx = Utils.findIndex(sourceTypes, newSourceType)
         imgui.Text("Type:")
         imgui.SameLine()
         imgui.SetNextItemWidth(180)
@@ -878,7 +868,7 @@ local function renderAddSourceWindow()
                 type    = newSourceType,
                 icon    = newSourceIcon or 0,
             })
-            setSettingsDirty()
+            Globals.settingsDirty = true
             showAddSource = false
             newSourceName = ""
             newSourceIcon = 0
@@ -894,9 +884,9 @@ end
 -- Edit Buff Window
 
 local function renderEditSourceWindow()
-    local currentSet = getSet(settings().selectedSet)
+    local currentSet = Utils.getSet(Globals.settings.selectedSet)
     local entry      = currentSet and currentSet[editingIdx]
-    if not entry or isPresetSet(settings().selectedSet) or isBuffing() then
+    if not entry or Utils.isPresetSet(Globals.settings.selectedSet) or Globals.isBuffing then
         editingIdx = nil
         return
     end
@@ -904,7 +894,7 @@ local function renderEditSourceWindow()
     local editOpen, editDraw = imgui.Begin("Edit Buff###BuffMasterEditSource", editingIdx ~= nil)
     if not editOpen then editingIdx = nil end
     if editDraw then
-        local tIdx = findIndex(sourceTypes, editSourceType)
+        local tIdx = Utils.findIndex(sourceTypes, editSourceType)
         imgui.Text("Type:")
         imgui.SameLine()
         imgui.SetNextItemWidth(180)
@@ -934,7 +924,7 @@ local function renderEditSourceWindow()
             entry.type = editSourceType
             entry.name = editSourceName
             entry.icon = editSourceIcon or 0
-            setSettingsDirty()
+            Globals.settingsDirty = true
             editingIdx = nil
         end
         imgui.SameLine()
@@ -947,9 +937,9 @@ end
 
 -- Render Dispatcher
 
-function ui.render()
+function Ui.render()
     if mq.TLO.MacroQuest.GameState() ~= 'INGAME' then return end
-    if not showUIFlag() and not showWelcomeFlag() then return end
+    if not Globals.showUI and not Globals.showWelcome then return end
 
     imgui.PushStyleVar(ImGuiStyleVar.FrameRounding, 4)
     imgui.PushStyleVar(ImGuiStyleVar.WindowRounding, 6)
@@ -957,7 +947,7 @@ function ui.render()
     imgui.PushStyleVar(ImGuiStyleVar.PopupRounding, 4)
     imgui.PushStyleVar(ImGuiStyleVar.GrabRounding, 4)
 
-    if showWelcomeFlag() then
+    if Globals.showWelcome then
         renderWelcome()
         imgui.PopStyleVar(5)
         return
@@ -972,9 +962,8 @@ function ui.render()
     imgui.PopStyleVar(5)
 end
 
-function ui.init(d)
-    deps       = d
-    bgTexture  = mq.CreateTexture(mq.luaDir .. "/buffmaster/resources/buffmaster_bg.png")
+function Ui.init()
+    bgTexture = mq.CreateTexture(mq.luaDir .. "/buffmaster/resources/buffmaster_bg.png")
 end
 
-return ui
+return Ui

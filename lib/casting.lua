@@ -1,43 +1,46 @@
 --[[
-    BuffMaster - casting.lua
+    BuffMaster - Casting.lua
     Spell memorization, gem management (top-N persistent + scratch slot),
     target-then-cast for spells and clicky items.
 ]]
 
-local mq = require('mq')
-local utils = require('buffmaster.lib.utils')
+local mq      = require('mq')
+local Utils   = require('lib.utils')
+local Globals = require('lib.globals')
+local Logger  = require('lib.logger')
 
-local casting = {}
+local Casting = {}
+
+function Casting.bumpCastCount(setName, spellName)
+    Globals.settings.castCounts                     = Globals.settings.castCounts or {}
+    Globals.settings.castCounts[setName]            = Globals.settings.castCounts[setName] or {}
+    Globals.settings.castCounts[setName][spellName] = (Globals.settings.castCounts[setName][spellName] or 0) + 1
+    Globals.settingsDirty                           = true
+end
 
 local me = mq.TLO.Me
-local fizzled = false
 
 local gemMap = {}
-local persistentSlots = {}
 local scratchGem = nil
-
-mq.event('buffMasterFizzle', "Your spell fizzles#*#", function()
-    fizzled = true
-end)
 
 -- Spell Memorization
 
 -- Returns gem slot on success, nil on hard failure (not in spellbook), false on transient failure.
-function casting.memorizeSpell(gemSlot, spellName, abortFunc)
+function Casting.memorizeSpell(gemSlot, spellName, abortFunc)
     if not me.Book(spellName)() then
-        utils.output("\ar%s is not in spellbook.", spellName)
+        Logger.log_info("\ar%s is not in spellbook.", spellName)
         return nil
     end
 
     for i = 1, me.NumGems() do
         if me.Gem(i)() == spellName then
-            utils.debugOutput("Spell '%s' already in gem %d", spellName, i)
+            Logger.log_debug("Spell '%s' already in gem %d", spellName, i)
             return i
         end
     end
 
-    utils.debugOutput("Memorizing %s in gem %d...", spellName, gemSlot)
-    mq.cmdf('/memspell %d "%s"', gemSlot, spellName)
+    Logger.log_debug("Memorizing %s in gem %d...", spellName, gemSlot)
+    Utils.DoCmd('/memspell %d "%s"', gemSlot, spellName)
 
     local spellBook = mq.TLO.Window('SpellBookWnd')
     local bookEverOpened = false
@@ -46,19 +49,19 @@ function casting.memorizeSpell(gemSlot, spellName, abortFunc)
         if me.Gem(gemSlot)() == spellName then break end
 
         if abortFunc and abortFunc() then
-            utils.output("\arMemorization of %s aborted.", spellName)
+            Logger.log_info("\arMemorization of %s aborted.", spellName)
             return false
         end
 
         if me.Casting() or me.Moving() then
-            utils.output("\arMemorization of %s interrupted.", spellName)
+            Logger.log_info("\arMemorization of %s interrupted.", spellName)
             return false
         end
 
         if spellBook.Open() then
             bookEverOpened = true
         elseif bookEverOpened then
-            utils.output("\arMemorization of %s interrupted (spellbook closed).", spellName)
+            Logger.log_info("\arMemorization of %s interrupted (spellbook closed).", spellName)
             return false
         end
 
@@ -68,11 +71,11 @@ function casting.memorizeSpell(gemSlot, spellName, abortFunc)
     end
 
     if me.Gem(gemSlot)() ~= spellName then
-        utils.output("\arTimed out memorizing %s.", spellName)
+        Logger.log_info("\arTimed out memorizing %s.", spellName)
         return false
     end
 
-    utils.debugOutput("Memorized %s in gem %d.", spellName, gemSlot)
+    Logger.log_debug("Memorized %s in gem %d.", spellName, gemSlot)
     return gemSlot
 end
 
@@ -116,9 +119,8 @@ end
 
 -- Public: configure gem layout based on current set definitions and cast counts.
 -- Called at queue start (and on settings reload).
-function casting.ensureTopNMemmed(allSets, castCounts, abortFunc)
+function Casting.ensureTopNMemmed(allSets, castCounts, abortFunc)
     gemMap = {}
-    persistentSlots = {}
 
     local numGems = me.NumGems() or 8
     local persistentCount = math.max(1, numGems - 1)
@@ -128,7 +130,7 @@ function casting.ensureTopNMemmed(allSets, castCounts, abortFunc)
     local top = pickTopN(counts, persistentCount)
 
     if #top == 0 then
-        utils.debugOutput("ensureTopNMemmed: no spells to persist")
+        Logger.log_debug("ensureTopNMemmed: no spells to persist")
         return true
     end
 
@@ -137,10 +139,9 @@ function casting.ensureTopNMemmed(allSets, castCounts, abortFunc)
     for _, spellName in ipairs(top) do
         for i = 1, persistentCount do
             if me.Gem(i)() == spellName and not claimedGems[i] then
-                gemMap[spellName] = i
-                claimedGems[i] = true
-                persistentSlots[i] = spellName
-                utils.debugOutput("Top spell '%s' already in gem %d", spellName, i)
+                gemMap[spellName]   = i
+                claimedGems[i]      = true
+                Logger.log_debug("Top spell '%s' already in gem %d", spellName, i)
                 break
             end
         end
@@ -157,23 +158,20 @@ function casting.ensureTopNMemmed(allSets, castCounts, abortFunc)
                 end
             end
             if not targetGem then
-                utils.output("\arNo free persistent gem for %s.", spellName)
+                Logger.log_info("\arNo free persistent gem for %s.", spellName)
                 break
             end
-            local result = casting.memorizeSpell(targetGem, spellName, abortFunc)
+            local result = Casting.memorizeSpell(targetGem, spellName, abortFunc)
             if result == false then return false end
-            if result == nil then
-                -- Not in spellbook, skip
-            else
-                gemMap[spellName] = result
+            if type(result) == "number" then
+                gemMap[spellName]   = result
                 claimedGems[result] = true
-                persistentSlots[result] = spellName
             end
         end
     end
 
     if me.Sitting() then
-        mq.cmd("/stand")
+        Utils.DoCmd("/stand")
         mq.delay(2000, function() return me.Standing() end)
     end
 
@@ -182,7 +180,7 @@ end
 
 -- Public: ensure a non-persistent spell is in the scratch gem and return that gem.
 -- Reuses the scratch slot for each swap-in.
-function casting.ensureGemForSpell(spellName, abortFunc)
+function Casting.ensureGemForSpell(spellName, abortFunc)
     if gemMap[spellName] then
         return gemMap[spellName]
     end
@@ -192,7 +190,7 @@ function casting.ensureGemForSpell(spellName, abortFunc)
         return target
     end
 
-    local result = casting.memorizeSpell(target, spellName, abortFunc)
+    local result = Casting.memorizeSpell(target, spellName, abortFunc)
     if result == false then return false end
     if result == nil then return nil end
 
@@ -201,24 +199,24 @@ end
 
 -- Casting
 
-function casting.waitForCastComplete(abortFunc)
-    fizzled = false
+function Casting.waitForCastComplete(abortFunc)
+    Globals.fizzled = false
 
     local startWait = 1000
     while startWait > 0 do
         mq.doevents('buffMasterFizzle')
-        if me.Casting() or fizzled then break end
+        if me.Casting() or Globals.fizzled then break end
         mq.delay(100)
         startWait = startWait - 100
     end
 
-    if fizzled then return true end
+    if Globals.fizzled then return true end
     if not me.Casting() then return false end
 
     local castWait = 30000
     while castWait > 0 do
         mq.doevents('buffMasterFizzle')
-        if fizzled or not me.Casting() then break end
+        if Globals.fizzled or not me.Casting() then break end
         if abortFunc and abortFunc() then break end
         mq.delay(100)
         castWait = castWait - 100
@@ -229,87 +227,88 @@ end
 
 local function targetSender(senderId, abortFunc)
     if (mq.TLO.Target.ID() or 0) == senderId then return true end
-    mq.cmdf("/target id %d", senderId)
-    return utils.waitFor(function() return (mq.TLO.Target.ID() or 0) == senderId end, 1000, 100, abortFunc)
+    Utils.DoCmd("/target id %d", senderId)
+    return Utils.waitFor(function() return (mq.TLO.Target.ID() or 0) == senderId end, 1000, 100, abortFunc)
 end
 
--- Returns true on success, false on failure, nil on "skip but not failure" (e.g. spell unknown).
-function casting.castOnSender(entry, senderId, abortFunc)
+-- Returns true on success, false on failure, nil on "skip but not failure" (e.Globals. spell unknown).
+function Casting.castOnSender(entry, senderId, abortFunc)
     if entry.type == "spell" then
         if not me.Book(entry.name)() then
-            utils.output("\ay%s not in spellbook. Skipping.", entry.name)
+            Logger.log_info("\ay%s not in spellbook. Skipping.", entry.name)
             return nil
         end
 
-        local gem = casting.ensureGemForSpell(entry.name, abortFunc)
-        if gem == false then return false end
-        if gem == nil then
-            utils.output("\arCannot prepare %s.", entry.name)
+        local gemResult = Casting.ensureGemForSpell(entry.name, abortFunc)
+        if gemResult == false then return false end
+        if type(gemResult) ~= "number" then
+            Logger.log_info("\arCannot prepare %s.", entry.name)
             return false
         end
+        local gem = gemResult --[[@as integer]]
 
-        if not utils.waitFor(function() return me.SpellReady(gem)() end, 30000, 100, abortFunc) then
-            utils.output("\arSpell %s not ready in time.", entry.name)
+        if not Utils.waitFor(function() return me.SpellReady(gem)() end, 30000, 100, abortFunc) then
+            Logger.log_info("\arSpell %s not ready in time.", entry.name)
             return false
         end
 
         if not targetSender(senderId, abortFunc) then
-            utils.output("\arFailed to target sender for %s.", entry.name)
+            Logger.log_info("\arFailed to target sender for %s.", entry.name)
             return false
         end
 
         for attempt = 1, 3 do
             if abortFunc and abortFunc() then return false end
-            utils.debugOutput("Casting spell '%s' from gem %d on target %d", entry.name, gem, senderId)
-            mq.cmdf("/cast %d", gem)
-            local started = casting.waitForCastComplete(abortFunc)
+            Logger.log_debug("Casting spell '%s' from gem %d on target %d", entry.name, gem, senderId)
+            Utils.DoCmd("/cast %d", gem)
+            local started = Casting.waitForCastComplete(abortFunc)
             if not started then
-                utils.output("\arSpell %s never started casting.", entry.name)
+                Logger.log_info("\arSpell %s never started Casting.", entry.name)
                 return false
             end
-            if not fizzled then return true end
+            if not Globals.fizzled then return true end
             if attempt < 3 then
-                utils.debugOutput("Spell fizzled (attempt %d/3), retrying...", attempt)
-                if not utils.waitFor(function() return me.SpellReady(gem)() end, 30000, 100, abortFunc) then
-                    utils.output("\arSpell %s not ready in time after fizzle.", entry.name)
+                Logger.log_debug("Spell fizzled (attempt %d/3), retrying...", attempt)
+                if not Utils.waitFor(function() return me.SpellReady(gem)() end, 30000, 100, abortFunc) then
+                    Logger.log_info("\arSpell %s not ready in time after fizzle.", entry.name)
                     return false
                 end
                 if not targetSender(senderId, abortFunc) then
-                    utils.output("\arLost target before retry of %s.", entry.name)
+                    Logger.log_info("\arLost target before retry of %s.", entry.name)
                     return false
                 end
             end
         end
-        utils.output("\arSpell %s fizzled 3 times. Giving up.", entry.name)
+        Logger.log_info("\arSpell %s fizzled 3 times. Giving up.", entry.name)
         return false
     elseif entry.type == "item" then
         if not me.ItemReady(entry.name)() then
             local item = mq.TLO.FindItem("=" .. entry.name)
             if not item() then
-                utils.output("\ay%s not found in inventory. Skipping.", entry.name)
+                Logger.log_info("\ay%s not found in inventory. Skipping.", entry.name)
                 return nil
             end
         end
 
-        if not utils.waitFor(function() return me.ItemReady(entry.name)() end, 30000, 100, abortFunc) then
-            utils.output("\arItem %s not ready in time.", entry.name)
+        if not Utils.waitFor(function() return me.ItemReady(entry.name)() end, 30000, 100, abortFunc) then
+            Logger.log_info("\arItem %s not ready in time.", entry.name)
             return false
         end
 
         if not targetSender(senderId, abortFunc) then
-            utils.output("\arFailed to target sender for %s.", entry.name)
+            Logger.log_info("\arFailed to target sender for %s.", entry.name)
             return false
         end
 
-        utils.debugOutput("Using item '%s' on target %d", entry.name, senderId)
-        mq.cmdf('/useitem "%s"', entry.name)
-        casting.waitForCastComplete(abortFunc)
+        Logger.log_debug("Using item '%s' on target %d", entry.name, senderId)
+        Utils.DoCmd('/useitem "%s"', entry.name)
+        Casting.waitForCastComplete(abortFunc)
         if abortFunc and abortFunc() then return false end
         return true
     end
 
-    utils.output("\arUnknown source type: %s", entry.type)
+    Logger.log_info("\arUnknown source type: %s", entry.type)
     return false
 end
 
-return casting
+return Casting

@@ -1,17 +1,20 @@
 --[[
-    BuffMaster - utils.lua
+    BuffMaster - Utils.lua
     Utility functions: polling, output, settings, hard-block detection
 ]]
 
-local mq = require('mq')
+local mq      = require('mq')
+local Set     = require('mq.Set')
+local Logger  = require('lib.logger')
+local Globals = require('lib.globals')
 
-local utils = {}
+local Utils   = {}
 
-local me = mq.TLO.Me
+local me      = mq.TLO.Me
 
 -- Polling
 
-function utils.waitFor(conditionFunc, timeoutMs, checkIntervalMs, abortFunc)
+function Utils.waitFor(conditionFunc, timeoutMs, checkIntervalMs, abortFunc)
     checkIntervalMs = checkIntervalMs or 100
     local elapsed = 0
     while elapsed < timeoutMs do
@@ -27,51 +30,82 @@ function utils.waitFor(conditionFunc, timeoutMs, checkIntervalMs, abortFunc)
     return false
 end
 
+function Utils.joinArgs(args, startIdx)
+    local parts = {}
+    for i = startIdx, #args do
+        table.insert(parts, args[i])
+    end
+    return #parts > 0 and table.concat(parts, " ") or nil
+end
+
+function Utils.findIndex(tbl, key)
+    for i, entry in ipairs(tbl) do
+        if entry.key == key then return i end
+    end
+    return 1
+end
+
+function Utils.DoCmd(cmd, ...)
+    local resolved = select('#', ...) > 0 and string.format(cmd, ...) or cmd
+    Logger.log_verbose("DoCmd: %s", resolved)
+    mq.cmd(resolved)
+    mq.delay(100) -- don't send commands to close to each other
+end
+
+function Utils.SendTell(target, msg, ...)
+    local resolved = select('#', ...) > 0 and string.format(msg, ...) or msg
+    while Globals.TellPending do
+        Logger.log_verbose("Waiting for previous tell to complete...")
+        mq.doevents()
+        mq.delay(1000)
+    end
+
+    Globals.TellPending = true
+    Logger.log_verbose("SendTell: %s -> %s", resolved, target)
+    Utils.DoCmd('/tell %s %s', target, resolved)
+    Utils.waitFor(function()
+        mq.doevents()
+        return not Globals.TellPending
+    end, 10000, 50)
+    Logger.log_verbose("SendTell completed: %s -> %s", resolved, target)
+end
+
 -- Output
 
-local config = nil
-
-function utils.bindConfig(s)
-    config = s
-end
-
-function utils.output(msg, ...)
-    printf("\a-t[BuffMaster]\aw " .. msg .. "\ax", ...)
-end
-
-function utils.debugOutput(msg, ...)
-    if config and config.debugMode then
-        local t = mq.gettime()
-        printf("\a-t[BuffMaster] \a-y[DEBUG] \a-g[%.3f]\aw " .. msg .. "\ax", t / 1000, ...)
+function Utils.bindConfig(s)
+    if s then
+        local lvl = math.max(3, s.logLevel or 3)
+        Logger.set_log_level(lvl)
+        Logger.set_log_to_file(s.logToFile or false)
     end
 end
 
-function utils.announce(channel, msg, ...)
+function Utils.announce(channel, msg, ...)
     if channel == "disabled" then return end
     local text = string.format("[BuffMaster] " .. msg, ...)
     if channel == "dannet" then
-        mq.cmdf("/dgt zone_%s_%s %s",
+        Utils.DoCmd("/dgt zone_%s_%s %s",
             (mq.TLO.EverQuest.Server() or ""):gsub(" ", ""),
             mq.TLO.Zone.ShortName() or "unknown",
             text)
     elseif channel == "e3bcs" then
-        mq.cmdf("/e3bcza %s", text)
+        Utils.DoCmd("/e3bcza %s", text)
     elseif channel == "raid" then
-        mq.cmdf("/rsay %s", text)
+        Utils.DoCmd("/rsay %s", text)
     elseif channel == "group" then
-        mq.cmdf("/g %s", text)
+        Utils.DoCmd("/g %s", text)
     end
 end
 
-function utils.announceQueueResult(channel, wasStopped, wasAborted, pauseReason, isFinished)
+function Utils.announceQueueResult(channel, wasStopped, wasAborted, pauseReason, isFinished)
     if wasStopped then
-        utils.announce(channel, "Buffing stopped.")
+        Utils.announce(channel, "Buffing stopped.")
     elseif wasAborted then
-        utils.announce(channel, "Buffing halted - attention needed.")
+        Utils.announce(channel, "Buffing halted - attention needed.")
     elseif pauseReason then
-        utils.announce(channel, "Buffing paused - %s.", pauseReason)
+        Utils.announce(channel, "Buffing paused - %s.", pauseReason)
     elseif isFinished then
-        utils.announce(channel, "Finished buffing.")
+        Utils.announce(channel, "Finished buffing.")
     end
 end
 
@@ -80,11 +114,11 @@ end
 local characterName = mq.TLO.Me.Name()
 local serverName = mq.TLO.EverQuest.Server():gsub("%s+", "")
 
-function utils.getSettingsPath()
+function Utils.getSettingsPath()
     return mq.configDir .. "/BuffMaster/" .. characterName .. "_" .. serverName .. "_" .. mq.TLO.Me.Class.ShortName() .. ".lua"
 end
 
-function utils.defaultSourceEntry()
+function Utils.defaultSourceEntry()
     return {
         enabled = false,
         name = "",
@@ -95,7 +129,8 @@ end
 
 local function defaultSettings()
     return {
-        debugMode = false,
+        logLevel = 3,
+        logToFile = false,
         triggerWord = "buff me",
         selectedSet = "",
         tellAccess = "disabled",
@@ -112,15 +147,15 @@ local function defaultSettings()
     }
 end
 
-function utils.saveSettings(settings)
-    mq.pickle(utils.getSettingsPath(), settings)
+function Utils.saveSettings(settings)
+    mq.pickle(Utils.getSettingsPath(), settings)
 end
 
-function utils.loadSettings()
+function Utils.loadSettings()
     local defaults = defaultSettings()
-    local configData, err = loadfile(utils.getSettingsPath())
+    local configData, err = loadfile(Utils.getSettingsPath())
     if err or not configData then
-        utils.saveSettings(defaults)
+        Utils.saveSettings(defaults)
         return defaults
     end
 
@@ -135,7 +170,7 @@ function utils.loadSettings()
     for _, set in pairs(settings.sets) do
         if type(set) == "table" then
             for _, entry in ipairs(set) do
-                local def = utils.defaultSourceEntry()
+                local def = Utils.defaultSourceEntry()
                 for key, value in pairs(def) do
                     if entry[key] == nil then
                         entry[key] = value
@@ -163,7 +198,7 @@ local function hasXTargetHaters()
     return false
 end
 
-function utils.getHardBlockReason()
+function Utils.getHardBlockReason()
     if me.CombatState() == "COMBAT" then return "in combat" end
     if hasXTargetHaters() then return "xtarget haters" end
     if me.Dead() then return "dead" end
@@ -176,8 +211,179 @@ function utils.getHardBlockReason()
     return nil
 end
 
-function utils.shouldAbortBuffing()
-    return utils.getHardBlockReason() ~= nil
+function Utils.shouldAbortBuffing()
+    return Utils.getHardBlockReason() ~= nil
 end
 
-return utils
+-- Preset System
+
+local presetClassMap = {}
+local presetAliasOf  = {}
+
+function Utils.resolvePresets()
+    Globals.presetSets = {}
+    presetClassMap     = {}
+    presetAliasOf      = {}
+
+    local presetFile
+    if mq.TLO.MacroQuest.BuildName():lower() == "emu" then
+        local serverName = mq.TLO.EverQuest.Server()
+        local fileSuffix = serverName:lower():gsub(" ", "")
+        presetFile = "presets." .. fileSuffix
+    else
+        presetFile = "presets.live"
+    end
+
+    package.loaded[presetFile] = nil
+    local ok, rawPresets = pcall(require, presetFile)
+    if not ok or not rawPresets then
+        Logger.log_info("No preset file found (%s). Continuing without presets.", presetFile)
+        return
+    end
+
+    for _, definition in ipairs(rawPresets) do
+        local classMatch = not definition.classes
+        if definition.classes then
+            for _, cls in ipairs(definition.classes) do
+                if cls == Globals.myClass then
+                    classMatch = true
+                    break
+                end
+            end
+        end
+
+        if classMatch then
+            local title = definition.title:gsub("Class", Globals.myClass)
+
+            local resolvedSet = {}
+            for _, group in ipairs(definition.effects) do
+                local found = false
+                for _, candidate in ipairs(group) do
+                    local available    = false
+                    local resolvedIcon = candidate.icon or 0
+                    if candidate.type == "spell" then
+                        local spell = mq.TLO.Spell(candidate.name)
+                        available = Globals.me.Book(candidate.name)() ~= nil and (spell.Level() or 0) <= Globals.me.Level()
+                    elseif candidate.type == "item" then
+                        local item = mq.TLO.FindItem("=" .. candidate.name)
+                        if item() ~= nil and (item.Clicky.RequiredLevel() or 0) <= Globals.me.Level() then
+                            available    = true
+                            resolvedIcon = item.Icon() or resolvedIcon
+                        end
+                    end
+
+                    if available then
+                        table.insert(resolvedSet, {
+                            enabled    = true,
+                            name       = candidate.name,
+                            type       = candidate.type,
+                            icon       = resolvedIcon,
+                            candidates = group,
+                        })
+                        found = true
+                        break
+                    end
+                end
+                if not found then
+                    table.insert(resolvedSet, {
+                        enabled    = false,
+                        name       = "",
+                        type       = "spell",
+                        icon       = 0,
+                        candidates = group,
+                    })
+                end
+            end
+            presetClassMap[title]     = definition.classes
+            Globals.presetSets[title] = resolvedSet
+            if definition.alias then
+                presetAliasOf[title] = definition.alias
+            end
+        end
+    end
+end
+
+function Utils.getSet(setName)
+    if Globals.settings.sets[setName] then return Globals.settings.sets[setName] end
+    if Globals.presetSets[setName] then return Globals.presetSets[setName] end
+    local lower = setName:lower()
+    for name, set in pairs(Globals.settings.sets) do
+        if name:lower() == lower then return set end
+    end
+    for name, set in pairs(Globals.presetSets) do
+        if name:lower() == lower then return set end
+        if presetAliasOf[name] and presetAliasOf[name]:lower() == lower then return set end
+    end
+    return nil
+end
+
+function Utils.findPresetForClass(class)
+    for presetName, classes in pairs(presetClassMap) do
+        for _, cls in ipairs(classes) do
+            if cls == class then return presetName end
+        end
+    end
+end
+
+function Utils.isPresetSet(setName)
+    return Globals.presetSets[setName] ~= nil
+end
+
+function Utils.getAllSetNames(useAliases)
+    local names = {}
+    for name in pairs(Globals.settings.sets) do
+        table.insert(names, name)
+    end
+    table.sort(names)
+
+    local presetNames = {}
+    for name in pairs(Globals.presetSets) do
+        if not Globals.settings.sets[name] then
+            table.insert(presetNames, useAliases and (presetAliasOf[name] or name) or name)
+        end
+    end
+    table.sort(presetNames)
+    for _, name in ipairs(presetNames) do
+        table.insert(names, name)
+    end
+    return names
+end
+
+-- Queue
+
+function Utils.clearQueue()
+    Globals.queue       = {}
+    Globals.queuedNames = Set.new({})
+end
+
+function Utils.addToQueue(playerName, setName, fromTell)
+    if Globals.aborted then
+        Logger.log_info("\arBuffing halted. Use /buffmaster reset to resume.")
+        return
+    end
+
+    local resolvedSetName = setName or Globals.settings.selectedSet
+    if not Utils.getSet(resolvedSetName) then
+        local available = table.concat(Utils.getAllSetNames(true), ", ")
+        Logger.log_info("\arSet '%s' not found. Available sets: %s", resolvedSetName, available)
+        if fromTell and Globals.settings.tellReplies then
+            Utils.SendTell(playerName, 'Set "%s" not found. Available sets: %s', resolvedSetName, available)
+        end
+        return
+    end
+
+    if Globals.queuedNames:contains(playerName:lower()) then return end
+
+    Globals.queuedNames:add(playerName:lower())
+    table.insert(Globals.queue, {
+        playerName = playerName,
+        setName    = setName,
+        fromTell   = fromTell or false,
+    })
+
+    if fromTell and Globals.settings.tellReplies then
+        Utils.SendTell(playerName, "You have been added to the queue.")
+    end
+end
+
+return Utils

@@ -27,7 +27,6 @@ The welcome window appears on first run. Set your trigger word and continue. Add
 | `/buffmaster stop` | Halt the current operation |
 | `/buffmaster reset` | Resume after a halt |
 | `/buffmaster show` / `hide` | Show or hide the UI |
-| `/buffmaster debug [on\|off]` | Toggle debug logging |
 | `/buffmaster tellaccess <mode>` | Set tell access (`disabled`/`anyone`/`group`/`raid`/`fellowship`/`allowlist`/`denylist`) |
 | `/buffmaster help` | Print the command list |
 
