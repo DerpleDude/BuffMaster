@@ -46,7 +46,7 @@ function Casting.memorizeSpell(gemSlot, spellName, abortFunc)
     local bookEverOpened = false
     local maxWait = 25000
     while maxWait > 0 do
-        if me.Gem(gemSlot)() == spellName then break end
+        if me.Gem(gemSlot)():lower() == spellName:lower() then break end
 
         if abortFunc and abortFunc() then
             Logger.log_info("\arMemorization of %s aborted.", spellName)
@@ -139,8 +139,8 @@ function Casting.ensureTopNMemmed(allSets, castCounts, abortFunc)
     for _, spellName in ipairs(top) do
         for i = 1, persistentCount do
             if me.Gem(i)() == spellName and not claimedGems[i] then
-                gemMap[spellName]   = i
-                claimedGems[i]      = true
+                gemMap[spellName] = i
+                claimedGems[i]    = true
                 Logger.log_debug("Top spell '%s' already in gem %d", spellName, i)
                 break
             end
