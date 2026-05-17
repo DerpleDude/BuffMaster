@@ -362,6 +362,14 @@ function Utils.addToQueue(playerName, setName, fromTell)
         return
     end
 
+    if (mq.TLO.Spawn("pc =" .. playerName).ID() or 0) == 0 then
+        Logger.log_info("\ay%s is not in this zone. Ignoring request.", playerName)
+        if fromTell and Globals.settings.tellReplies then
+            Utils.SendTell(playerName, "I cannot see you in this zone.")
+        end
+        return
+    end
+
     local resolvedSetName = setName or Globals.settings.selectedSet
     if not Utils.getSet(resolvedSetName) then
         local available = table.concat(Utils.getAllSetNames(true), ", ")
