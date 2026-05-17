@@ -264,6 +264,12 @@ function Utils.resolvePresets()
                     if candidate.type == "spell" then
                         local spell = mq.TLO.Spell(candidate.name)
                         available = Globals.me.Book(candidate.name)() ~= nil and (spell.Level() or 0) <= Globals.me.Level()
+                    elseif candidate.type == "aa" then
+                        local aa = Globals.me.AltAbility(candidate.name)
+                        if (aa.Rank() or 0) > 0 then
+                            available    = true
+                            resolvedIcon = (aa.Spell() and aa.Spell.SpellIcon()) or resolvedIcon
+                        end
                     elseif candidate.type == "item" then
                         local item = mq.TLO.FindItem("=" .. candidate.name)
                         if item() ~= nil and (item.Clicky.RequiredLevel() or 0) <= Globals.me.Level() then

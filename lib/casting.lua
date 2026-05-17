@@ -46,7 +46,7 @@ function Casting.memorizeSpell(gemSlot, spellName, abortFunc)
     local bookEverOpened = false
     local maxWait = 25000
     while maxWait > 0 do
-        if me.Gem(gemSlot)():lower() == spellName:lower() then break end
+        if (me.Gem(gemSlot)() or ""):lower() == spellName:lower() then break end
 
         if abortFunc and abortFunc() then
             Logger.log_info("\arMemorization of %s aborted.", spellName)
@@ -281,6 +281,22 @@ function Casting.castOnSender(entry, senderId, abortFunc)
         end
         Logger.log_info("\arSpell %s fizzled 3 times. Giving up.", entry.name)
         return false
+    elseif entry.type == "aa" then
+        if not Utils.waitFor(function() return me.AltAbilityReady(entry.name)() end, 30000, 100, abortFunc) then
+            Logger.log_info("\arAA %s not ready in time.", entry.name)
+            return false
+        end
+
+        if not targetSender(senderId, abortFunc) then
+            Logger.log_info("\arFailed to target sender for %s.", entry.name)
+            return false
+        end
+
+        Logger.log_debug("Using AA '%s' on target %d", entry.name, senderId)
+        Utils.DoCmd("/aa act %s", entry.name)
+        Casting.waitForCastComplete(abortFunc)
+        if abortFunc and abortFunc() then return false end
+        return true
     elseif entry.type == "item" then
         if not me.ItemReady(entry.name)() then
             local item = mq.TLO.FindItem("=" .. entry.name)
