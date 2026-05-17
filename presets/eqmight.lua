@@ -1,30 +1,56 @@
 --[[
     BuffMaster - EQ Might EMU Server Presets
-    Seed data - one signature buff per supported caster class.
-    Spell names are placeholders; edit to match what your character has.
+    Spell/AA/item priority lists per class, ported from RGMercs EQ Might
+    class configs (GroupBuff rotation scope). First known source wins, so
+    lists are highest-tier first.
 ]]
 
 return {
     {
         title = "Class Preset (EQM)",
         alias = "preset",
-        classes = { "ENC", },
+        classes = { "BRD", },
         effects = {
-            {
-                { name = "Brilliance", type = "spell", },
-                { name = "Clarity II", type = "spell", },
-                { name = "Clarity", type = "spell", },
+            { -- runspeed
+                { name = "Selo's Sonata", type = "aa", },
             },
         },
     },
     {
         title = "Class Preset (EQM)",
         alias = "preset",
-        classes = { "NEC", },
-        effects = {
-            {
-                { name = "Call of Bones", type = "spell", },
-                { name = "Lich", type = "spell", },
+        classes = { "BST", },
+        effects = { -- not currently used: RunSpeedBuff, HasteBuff
+            { -- AtkBuff
+                { name = "Artifact of Irionu", type = "item", },
+                { name = "Ferocity of Irionu", type = "spell", },
+                { name = "Ferocity",           type = "spell", },
+                { name = "Savagery",           type = "spell", },
+            },
+            { -- ManaRegenBuff
+                { name = "Spiritual Ascendance", type = "spell", },
+                { name = "Spiritual Dominion",   type = "spell", },
+                { name = "Spiritual Purity",     type = "spell", },
+                { name = "Spiritual Radiance",   type = "spell", },
+                { name = "Spiritual Light",      type = "spell", },
+            },
+            { -- AtkHPBuff
+                { name = "Spiritual Vim",      type = "spell", },
+                { name = "Spiritual Vitality", type = "spell", },
+                { name = "Spiritual Vigor",    type = "spell", },
+                { name = "Spiritual Strength", type = "spell", },
+                { name = "Spiritual Brawn",    type = "spell", },
+            },
+            { -- FocusSpell
+                { name = "Focus of Amilan",    type = "spell", },
+                { name = "Focus of Alladnu",   type = "spell", },
+                { name = "Talisman of Kragg",  type = "spell", },
+                { name = "Talisman of Altuna", type = "spell", },
+                { name = "Talisman of Tnarg",  type = "spell", },
+                { name = "Inner Fire",         type = "spell", },
+            },
+            { -- AvatarSpell
+                { name = "Infusion of Spirit", type = "spell", },
             },
         },
     },
@@ -32,11 +58,44 @@ return {
         title = "Class Preset (EQM)",
         alias = "preset",
         classes = { "CLR", },
-        effects = {
-            {
-                { name = "Aegolism", type = "spell", },
-                { name = "Temperance", type = "spell", },
-                { name = "Symbol of Naltron", type = "spell", },
+        effects = { -- not currently used: AegoBuff (use symbol), ACBuff (use druid type1)
+            { -- GroupSymbolBuff
+                { name = "Mythical Armband of Elushar",    type = "item", },
+                { name = "Legendary Armband of Mithaniel", type = "item", },
+                { name = "Balikor's Mark",                 type = "spell", },
+                { name = "Kazad's Mark",                   type = "spell", },
+                { name = "Marzin's Mark",                  type = "spell", },
+                { name = "Naltron's Mark",                 type = "spell", },
+                { name = "Symbol of Marzin",               type = "spell", },
+                { name = "Symbol of Naltron",              type = "spell", },
+                { name = "Symbol of Pinzarn",              type = "spell", },
+                { name = "Symbol of Ryltan",               type = "spell", },
+                { name = "Symbol of Transal",              type = "spell", },
+            },
+            { -- SpellBlessing
+                { name = "Aura of Purpose",       type = "spell", },
+                { name = "Blessing of Purpose",   type = "spell", },
+                { name = "Aura of Devotion",      type = "spell", },
+                { name = "Blessing of Devotion",  type = "spell", },
+                { name = "Aura of Reverence",     type = "spell", },
+                { name = "Blessing of Reverence", type = "spell", },
+                { name = "Blessing of Faith",     type = "spell", },
+                { name = "Blessing of Piety",     type = "spell", },
+            },
+            { -- SingleVieBuff
+                { name = "Artifact of Aegis",  type = "item", },
+                { name = "Aegis of Vie",       type = "spell", },
+                { name = "Panoply of Vie",     type = "spell", },
+                { name = "Bulwark of Vie",     type = "spell", },
+                { name = "Protection of Vie",  type = "spell", },
+                { name = "Guard of Vie",       type = "spell", },
+                { name = "Ward of Vie",        type = "spell", },
+            },
+            { -- DivineBuff
+                { name = "Divine Incursion",    type = "spell", },
+                { name = "Divine Interaction",  type = "spell", },
+                { name = "Divine Intervention", type = "spell", },
+                { name = "Death Pact",          type = "spell", },
             },
         },
     },
@@ -45,21 +104,112 @@ return {
         alias = "preset",
         classes = { "DRU", },
         effects = {
-            {
+            { -- MoveSpells
+                { name = "Flight of Eagles", type = "aa", },
+                { name = "Flight of Eagles", type = "spell", },
+                { name = "Spirit of Eagle",  type = "spell", },
+                { name = "Pack Spirit",      type = "spell", },
+                { name = "Spirit of Wolf",   type = "spell", },
+            },
+            { -- ReptileBuff
+                { name = "Skin of the Green Dragon",     type = "spell", },
+                { name = "Ancient: Skin of the Reptile", type = "spell", },
+                { name = "Skin of the Reptile",          type = "spell", },
+                { name = "Skin of the Serpent",          type = "spell", },
+            },
+            { -- MeleeBuff
+                { name = "Mammoth's Strength", type = "spell", },
+                { name = "Lion's Strength",    type = "spell", },
+                { name = "Nature's Might",     type = "spell", },
+            },
+            { -- HPTypeOneGroup
+                { name = "Blessing of Steeloak",     type = "spell", },
+                { name = "Blessing of the Nine",     type = "spell", },
                 { name = "Protection of the Glades", type = "spell", },
-                { name = "Skin like Nature", type = "spell", },
-                { name = "Spirit of Wolf", type = "spell", },
+                { name = "Protection of Nature",     type = "spell", },
+                { name = "Protection of Diamond",    type = "spell", },
+                { name = "Protection of Steel",      type = "spell", },
+                { name = "Protection of Rock",       type = "spell", },
+                { name = "Protection of Wood",       type = "spell", },
+                { name = "Skin like Wood",           type = "spell", },
+            },
+            { -- GroupRegenBuff
+                { name = "Blessing of Oak",           type = "spell", },
+                { name = "Blessing of Replenishment", type = "spell", },
+                { name = "Regrowth of the Grove",     type = "spell", },
+                { name = "Pack Chloroplast",          type = "spell", },
+                { name = "Pack Regeneration",         type = "spell", },
+                { name = "Regeneration",              type = "spell", },
+            },
+            { -- GroupDmgShield
+                { name = "Legacy of Nettles",         type = "spell", },
+                { name = "Legacy of Bracken",         type = "spell", },
+                { name = "Ancient: Legacy of Blades", type = "spell", },
+                { name = "Legacy of Thorn",           type = "spell", },
+                { name = "Legacy of Spike",           type = "spell", },
+                { name = "Shield of Thorns",          type = "spell", },
+                { name = "Shield of Spikes",          type = "spell", },
+                { name = "Shield of Brambles",        type = "spell", },
+                { name = "Shield of Barbs",           type = "spell", },
+                { name = "Shield of Thistles",        type = "spell", },
             },
         },
     },
     {
         title = "Class Preset (EQM)",
         alias = "preset",
-        classes = { "SHM", },
-        effects = {
-            {
-                { name = "Talisman of Wunshi", type = "spell", },
-                { name = "Talisman of the Brute", type = "spell", },
+        classes = { "ENC", },
+        effects = { -- not currently used: AegoBuff (use symbol), ACBuff (use druid type1)
+            { -- ManaRegen
+                { name = "Ancient Artifact of Clairvoyance", type = "item", },
+                { name = "Seer's Intuition",                 type = "spell", },
+                { name = "Ancient: Blessing of Clairvoyance", type = "spell", },
+                { name = "Voice of Clairvoyance",            type = "spell", },
+                { name = "Clairvoyance",                     type = "spell", },
+                { name = "Voice of Quellious",               type = "spell", },
+                { name = "Tranquility",                      type = "spell", },
+                { name = "Koadic's Endless Intellect",       type = "spell", },
+                { name = "Gift of Pure Thought",             type = "spell", },
+                { name = "Clarity II",                       type = "spell", },
+                { name = "Boon of the Clear Mind",           type = "spell", },
+                { name = "Clarity",                          type = "spell", },
+                { name = "Breeze",                           type = "spell", },
+            },
+            { -- HasteBuff
+                { name = "Artifact of Salik",   type = "item", },
+                { name = "Speed of Ellowind",   type = "spell", },
+                { name = "Hastening of Salik",  type = "spell", },
+                { name = "Speed of Salik",      type = "spell", },
+                { name = "Vallon's Quickening", type = "spell", },
+                { name = "Speed of the Brood",  type = "spell", },
+                { name = "Visions of Grandeur", type = "spell", },
+                { name = "Wondrous Rapidity",   type = "spell", },
+                { name = "Aanya's Quickening",  type = "spell", },
+                { name = "Swift Like the Wind", type = "spell", },
+                { name = "Celerity",            type = "spell", },
+                { name = "Alacrity",            type = "spell", },
+                { name = "Quickness",           type = "spell", },
+            },
+            { -- IllusionBuff
+                { name = "Boon of the Sanguinarch", type = "spell", },
+                { name = "Boon of the Vampire",     type = "spell", },
+                { name = "Night's Dark Terror",     type = "spell", },
+                { name = "Boon of the Garou",       type = "spell", },
+            },
+            { -- SpellProcBuff
+                { name = "Artifact of Mana Strike", type = "item", },
+                { name = "Mana Recursion",          type = "spell", },
+                { name = "Mana Flare",              type = "spell", },
+            },
+            { -- SingleRune
+                { name = "Rune of Ellowind",  type = "spell", },
+                { name = "Rune of Salik",     type = "spell", },
+                { name = "Rune of Zebuxoruk", type = "spell", },
+                { name = "Rune V",            type = "spell", },
+                { name = "Rune IV",           type = "spell", },
+                { name = "Rune III",          type = "spell", },
+                { name = "Rune II",           type = "spell", },
+                { name = "Rune I",            type = "spell", },
             },
         },
     },
@@ -68,9 +218,96 @@ return {
         alias = "preset",
         classes = { "MAG", },
         effects = {
-            {
-                { name = "Burnout IV", type = "spell", },
-                { name = "Burnout", type = "spell", },
+            { -- LongDurDmgShield
+                { name = "Circle of Fireskin",    type = "spell", },
+                { name = "Fireskin",              type = "spell", },
+                { name = "Maelstrom of Ro",       type = "spell", },
+                { name = "Flameshield of Ro",     type = "spell", },
+                { name = "Aegis of Ro",           type = "spell", },
+                { name = "Cadeau of Flame",       type = "spell", },
+                { name = "Boon of Immolation",    type = "spell", },
+                { name = "Shield of Lava",        type = "spell", },
+                { name = "Barrier of Combustion", type = "spell", },
+                { name = "Inferno Shield",        type = "spell", },
+                { name = "Shield of Flame",       type = "spell", },
+                { name = "Shield of Fire",        type = "spell", },
+            },
+        },
+    },
+    {
+        title = "Class Preset (EQM)",
+        alias = "preset",
+        classes = { "RNG", },
+        effects = { -- not currently used: MoveBuff, Cold/Fire ResistBuff
+            { -- PredatorBuff
+                { name = "Snarl of the Predator",  type = "spell", },
+                { name = "Howl of the Predator",   type = "spell", },
+                { name = "Spirit of the Predator", type = "spell", },
+                { name = "Call of the Predator",   type = "spell", },
+                { name = "Mark of the Predator",   type = "spell", },
+            },
+            { -- StrengthHPBuff
+                { name = "Strength of the Forest Stalker", type = "spell", },
+                { name = "Strength of the Hunter",         type = "spell", },
+                { name = "Strength of Tunare",             type = "spell", },
+                { name = "Strength of Nature",             type = "spell", },
+            },
+            { -- GuardBuff
+                { name = "Guard of the Earth",    type = "spell", },
+                { name = "Call of the Rathe",     type = "spell", },
+                { name = "Call of Earth",         type = "spell", },
+                { name = "Riftwind's Protection", type = "spell", },
+            },
+        },
+    },
+    {
+        title = "Class Preset (EQM)",
+        alias = "preset",
+        classes = { "SHM", },
+        effects = {
+            { -- SlowProcBuff
+                { name = "Lassitude",       type = "spell", },
+                { name = "Lingering Sloth", type = "spell", },
+            },
+            { -- GroupFocusSpell
+                { name = "Ancient: Blessing of Wunshi", type = "spell", },
+                { name = "Talisman of Wunshi",          type = "spell", },
+                { name = "Focus of the Seventh",        type = "spell", },
+                { name = "Khura's Focusing",            type = "spell", },
+            },
+            { -- LowLvlAtkBuff
+                { name = "Artifact of the Champion", type = "item", },
+                { name = "Champion",                 type = "spell", },
+                { name = "Ferine Avatar",            type = "spell", },
+                { name = "Ancient: Feral Avatar",    type = "spell", },
+                { name = "Primal Avatar",            type = "spell", },
+                { name = "Harnessing of Spirit",     type = "spell", },
+            },
+            { -- MeleeBuff
+                { name = "Ancient: Talisman of Might", type = "spell", },
+                { name = "Talisman of Might",          type = "spell", },
+                { name = "Spirit of Might",            type = "spell", },
+            },
+            { -- EvasionBuff
+                { name = "Preternatural Foresight", type = "spell", },
+                { name = "Talisman of Sense",       type = "spell", },
+                { name = "Spirit of Sense",         type = "spell", },
+            },
+            { -- RegenBuff
+                { name = "Spirit of the Stoic One",   type = "spell", },
+                { name = "Talisman of Perseverance",  type = "spell", },
+                { name = "Spirit of Perseverance",    type = "spell", },
+                { name = "Blessing of Replenishment", type = "spell", },
+                { name = "Replenishment",             type = "spell", },
+                { name = "Regrowth of Dar Khura",     type = "spell", },
+                { name = "Regrowth",                  type = "spell", },
+                { name = "Chloroplast",               type = "spell", },
+                { name = "Regeneration",              type = "spell", },
+            },
+            { -- MeleeProcBuff (no Panther — combat only; items beat their respective spells)
+                { name = "Artifact of the Leopard", type = "item", },
+                { name = "Artifact of the Jaguar",  type = "item", },
+                { name = "Talisman of the Jaguar",  type = "spell", },
             },
         },
     },

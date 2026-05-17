@@ -36,6 +36,7 @@ local commandsExpanded = nil
 
 local sourceTypes      = {
     { key = "spell", label = "Spell", },
+    { key = "aa",    label = "AA", },
     { key = "item",  label = "Clicky Item", },
 }
 
@@ -198,6 +199,12 @@ local function renderSourceHeaderControls(currentSet, idx, headerCursorPos, head
             local spell = mq.TLO.Spell(entry.name)
             if spell() then
                 iconCell = spell.SpellIcon()
+                iconAnim = animSpells
+            end
+        elseif entry.type == "aa" then
+            local aa = mq.TLO.Me.AltAbility(entry.name)
+            if aa() and aa.Spell() then
+                iconCell = aa.Spell.SpellIcon()
                 iconAnim = animSpells
             end
         end
@@ -853,7 +860,7 @@ local function renderAddSourceWindow()
             imgui.SameLine()
             newSourceName, newSourceIcon = renderCursorCapture(newSourceName, newSourceIcon, "addCapture")
         else
-            imgui.Text("Spell Name:")
+            imgui.Text(newSourceType == "aa" and "AA Name:" or "Spell Name:")
             imgui.SameLine()
             imgui.SetNextItemWidth(200)
             newSourceName = imgui.InputTextWithHint("##newName", "Exact In-Game Name", newSourceName)
@@ -913,7 +920,7 @@ local function renderEditSourceWindow()
             imgui.SameLine()
             editSourceName, editSourceIcon = renderCursorCapture(editSourceName, editSourceIcon, "editCapture")
         else
-            imgui.Text("Spell Name:")
+            imgui.Text(editSourceType == "aa" and "AA Name:" or "Spell Name:")
             imgui.SameLine()
             imgui.SetNextItemWidth(200)
             editSourceName = imgui.InputTextWithHint("##editName", "Exact In-Game Name", editSourceName)
