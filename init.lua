@@ -15,6 +15,7 @@ local Logger  = require('lib.logger')
 local Events  = require('lib.events')
 local Binds   = require('lib.binds')
 local Ui      = require('lib.ui')
+local Actor   = require('lib.actor')
 
 require('lib.events')
 
@@ -270,10 +271,15 @@ if Globals.settings.tellAccess ~= "disabled" then
     Events.registerTellEvent()
 end
 
+Actor.register(function(playerName, setName)
+    Utils.addToQueue(playerName, setName, true, true)
+end)
+
 Logger.log_info("Running.")
 
 while mq.TLO.MacroQuest.GameState() == 'INGAME' do
     mq.doevents()
+    Utils.drainPendingRequests()
 
     if not Globals.isBuffing and Globals.me.Class.ShortName() ~= Globals.myClass then
         local oldTellAccess = Globals.settings.tellAccess

@@ -362,10 +362,55 @@ function Utils.clearQueue()
     Globals.queuedNames = Set.new({})
 end
 
-function Utils.addToQueue(playerName, setName, fromTell)
+local REFRESH_THRESHOLD_SECONDS = 60
+
+function Utils.hasApplicableBuff(senderSpawn, set)
+    if not senderSpawn or not senderSpawn() or not set then return false end
+    for _, entry in ipairs(set) do
+        if entry.enabled and entry.name ~= "" then
+            local spellName = entry.name
+            local sourceOk = false
+            if entry.type == "spell" then
+                sourceOk = me.Book(spellName)() ~= nil
+            elseif entry.type == "aa" then
+                local aa = me.AltAbility(spellName)
+                sourceOk = aa() ~= nil
+                if sourceOk and aa.Spell.Name() then spellName = aa.Spell.Name() end
+            elseif entry.type == "item" then
+                sourceOk = mq.TLO.FindItem("=" .. spellName)() ~= nil
+                local item = mq.TLO.FindItem("=" .. spellName)
+                if sourceOk and item.Spell.Name() then spellName = item.Spell.Name() end
+            end
+            if sourceOk then
+                local existing = senderSpawn.FindBuff(spellName)
+                local remaining = (existing() and existing.Duration.TotalSeconds()) or 0
+                if remaining < REFRESH_THRESHOLD_SECONDS then return true end
+            end
+        end
+    end
+    return false
+end
+
+function Utils.addToQueue(playerName, setName, fromTell, fromBroadcast)
+    table.insert(Globals.pendingRequests, {
+        playerName    = playerName,
+        setName       = setName,
+        fromTell      = fromTell or false,
+        fromBroadcast = fromBroadcast or false,
+    })
+end
+
+local function processQueueRequest(playerName, setName, fromTell, fromBroadcast)
     if Globals.aborted then
         Logger.log_info("\arBuffing halted. Use /buffmaster reset to resume.")
         return
+    end
+
+    if not fromBroadcast then
+        local ok, Actor = pcall(require, 'lib.actor')
+        if ok and Actor and Actor.broadcastQueue then
+            Actor.broadcastQueue(playerName, setName)
+        end
     end
 
     if (mq.TLO.Spawn("pc =" .. playerName).ID() or 0) == 0 then
@@ -377,12 +422,15 @@ function Utils.addToQueue(playerName, setName, fromTell)
     end
 
     local resolvedSetName = setName or Globals.settings.selectedSet
-    if not Utils.getSet(resolvedSetName) then
+    local resolvedSet = Utils.getSet(resolvedSetName)
+    if not resolvedSet then
         local available = table.concat(Utils.getAllSetNames(true), ", ")
         Logger.log_info("\arSet '%s' not found. Available sets: %s", resolvedSetName, available)
-        if fromTell and Globals.settings.tellReplies then
-            Utils.SendTell(playerName, 'Set "%s" not found. Available sets: %s', resolvedSetName, available)
-        end
+        return
+    end
+
+    if not Utils.hasApplicableBuff(mq.TLO.Spawn("pc =" .. playerName), resolvedSet) then
+        Logger.log_info("\ayNo applicable buffs for %s. Skipping.", playerName)
         return
     end
 
@@ -397,6 +445,13 @@ function Utils.addToQueue(playerName, setName, fromTell)
 
     if fromTell and Globals.settings.tellReplies then
         Utils.SendTell(playerName, "You have been added to the queue.")
+    end
+end
+
+function Utils.drainPendingRequests()
+    while #Globals.pendingRequests > 0 do
+        local req = table.remove(Globals.pendingRequests, 1)
+        processQueueRequest(req.playerName, req.setName, req.fromTell, req.fromBroadcast)
     end
 end
 

@@ -23,6 +23,7 @@ globals.aborted           = false
 globals.buffHistory       = {}
 globals.queue             = {}
 globals.queuedNames       = Set.new({})
+globals.pendingRequests   = {}
 globals.isBuffing         = false
 globals.showUI            = true
 globals.showWelcome       = false
