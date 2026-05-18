@@ -25,6 +25,7 @@ globals.queue             = {}
 globals.queuedNames       = Set.new({})
 globals.pendingRequests   = {}
 globals.isBuffing         = false
+globals.activeSession     = nil
 globals.showUI            = true
 globals.showWelcome       = false
 globals.settingsDirty     = false

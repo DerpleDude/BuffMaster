@@ -60,10 +60,26 @@ local function buffPlayer(playerName, setName, fromTell, abortCheck)
         return stopped or (abortCheck and abortCheck())
     end
 
+    local buffCount = 0
+    for _, entry in ipairs(set) do
+        if entry.enabled and entry.name ~= "" then buffCount = buffCount + 1 end
+    end
+    Logger.log_info("Starting buffs for %s (%d Buffs)", playerName, buffCount)
+    Globals.activeSession = {
+        playerName = playerName,
+        setName = setName,
+        buffCount = buffCount,
+        castedSpells = {},
+        currentSpell = nil,
+    }
+
     local results = {}
     for i, entry in ipairs(set) do
         if entry.enabled and entry.name ~= "" then
             if abortFunc() then break end
+            Logger.log_info("-> Casting %s", entry.name)
+            Globals.activeSession.currentSpell = entry.name
+            table.insert(Globals.activeSession.castedSpells, entry.name)
 
             -- Re-check sender existence and range
             local sid = senderSpawn.ID() or 0
@@ -116,9 +132,9 @@ local function buffPlayer(playerName, setName, fromTell, abortCheck)
 
     local suffix = wasAborted and " (ABORTED)" or ""
     if #failed > 0 then
-        Logger.log_debug("Cast %d/%d buffs for %s. (Set: %s) Failed: %s%s", passed, total, playerName, setName, table.concat(failed, ", "), suffix)
+        Logger.log_info("Cast %d/%d buffs for %s. (Set: %s) Failed: %s%s", passed, total, playerName, setName, table.concat(failed, ", "), suffix)
     else
-        Logger.log_debug("Cast %d/%d buffs for %s. (Set: %s)%s", passed, total, playerName, setName, suffix)
+        Logger.log_info("Cast %d/%d buffs for %s. (Set: %s)%s", passed, total, playerName, setName, suffix)
     end
 
     if fromTell and Globals.settings.tellReplies then
@@ -129,6 +145,7 @@ local function buffPlayer(playerName, setName, fromTell, abortCheck)
         end
     end
 
+    Globals.activeSession = nil
     return true
 end
 

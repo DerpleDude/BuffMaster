@@ -367,6 +367,18 @@ local function renderMainWindow()
             end
         end
 
+        local active = Globals.activeSession
+        if active or #Globals.queue > 0 then
+            imgui.TextColored(0.6, 0.85, 1.0, 1, "Queue Status (%d queued)", #Globals.queue)
+            if active then
+                imgui.Text("  Starting buffs for %s (%d Buffs)", active.playerName, active.buffCount)
+                for _, spellName in ipairs(active.castedSpells) do
+                    imgui.TextColored(0.85, 0.85, 0.85, 1, "  -> Casting %s", spellName)
+                end
+            end
+            imgui.Separator()
+        end
+
         if imgui.CollapsingHeader("History") then
             local _, availY = imgui.GetContentRegionAvail()
             imgui.BeginChild("##HistoryScroll", ImVec2(0, availY - imgui.GetFrameHeightWithSpacing()), 0)
